@@ -104,9 +104,8 @@ export const SCENES: SceneDef[] = [
 
 export const FINAL_CTA = {
   primaryLabel: 'START A PROJECT',
-  // TODO: replace with the real contact address before going live.
   primaryHref:
-    'mailto:hello@example.com?subject=New%20project%20%E2%80%94%20Immersive%20Web%20Experience',
+    'mailto:fluxorahub.crm@gmail.com?subject=New%20project%20%E2%80%94%20Immersive%20Web%20Experience',
   secondaryLabel: 'VIEW EXPERIENCE AGAIN',
   footer: '© 2026 — AN EXPERIMENT IN SCROLL-DRIVEN CINEMATOGRAPHY',
 }
@@ -138,8 +137,6 @@ export const EXPERIENCE = {
 
   /** Exponential smoothing applied to scroll progress (higher = snappier). */
   smoothing: 5.5,
-  /** Don't touch video.currentTime for deltas smaller than this (s). */
-  minTimeDelta: 1 / 30,
   /** Keep away from the very last frame to avoid the 'ended' state. */
   videoEndEpsilon: 0.05,
 
@@ -150,6 +147,34 @@ export const EXPERIENCE = {
   /** Final darkening overlay. */
   dimStart: 0.9,
   dimMax: 0.55,
+}
+
+/**
+ * Seek governor — closes the cross-browser gap.
+ *
+ * Browsers disagree wildly about what a `currentTime` seek costs: Chrome and
+ * Safari land one on an all-intra file in a few milliseconds, Firefox can take
+ * tens of milliseconds and quietly queues the overflow until the decoder
+ * stutters. Rather than guessing a fixed rate, the governor measures how long
+ * this browser actually takes to present a seeked frame and issues seeks only
+ * as fast as it can retire them.
+ */
+export const GOVERNOR = {
+  /** Assumed seek cost before the first measurement lands (ms). */
+  initialCostMs: 24,
+  /** Weight of each new latency sample in the moving average. */
+  sample: 0.25,
+  /** Floor/ceiling for the interval between seeks (ms). */
+  minIntervalMs: 16,
+  maxIntervalMs: 260,
+  /** Safety factor over the measured cost. */
+  headroom: 1.15,
+  /** A seek still pending after this is assumed lost (ms). */
+  watchdogMs: 900,
+  /** Never seek for movement smaller than this (s). */
+  minTimeDelta: 1 / 60,
+  /** Expensive seeks demand a coarser threshold: seconds gained per ms of cost. */
+  costToTimeDelta: 1 / 900,
 }
 
 export const LOADER = {

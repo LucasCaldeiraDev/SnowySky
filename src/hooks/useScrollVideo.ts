@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { RefObject } from 'react'
-import { ASSETS, EXPERIENCE, LOADER } from '../data/scenes'
+import { ASSETS, EXPERIENCE, GOVERNOR, LOADER } from '../data/scenes'
 import type { LoaderBus, PreloadState } from '../lib/loaderBus'
 
 export interface ScrollVideoController {
@@ -8,6 +8,36 @@ export interface ScrollVideoController {
   isReady(): boolean
   /** Feed the smoothed experience progress (0–1), once per frame. */
   update(progress: number): void
+}
+
+/** Video elements that expose the (Chrome/Safari) frame-presentation callback. */
+type FrameCallbackVideo = HTMLVideoElement & {
+  requestVideoFrameCallback?: (cb: (now: number) => void) => number
+  cancelVideoFrameCallback?: (handle: number) => void
+  fastSeek?: (time: number) => void
+}
+
+interface GovernorState {
+  /** Moving average of what a seek costs on this browser (ms). */
+  cost: number
+  /** performance.now() when the in-flight seek was issued; 0 when idle. */
+  pendingSince: number
+  lastSeekAt: number
+  samples: number
+  /** Outstanding requestVideoFrameCallback handle, 0 when none. */
+  frameHandle: number
+}
+
+const clamp = (v: number, lo: number, hi: number) =>
+  v < lo ? lo : v > hi ? hi : v
+
+/** Record a completed seek and fold its latency into the running cost. */
+function settle(gov: GovernorState, at: number) {
+  if (gov.pendingSince === 0) return
+  const latency = at - gov.pendingSince
+  gov.cost += (latency - gov.cost) * GOVERNOR.sample
+  gov.pendingSince = 0
+  gov.samples += 1
 }
 
 interface ProbeResult {
@@ -37,7 +67,7 @@ async function probe(url: string, mobile: boolean): Promise<ProbeResult | null> 
 
 /**
  * Owns everything video-related: source selection (mobile file first when it
- * exists), the preload strategy, seek throttling and the iOS unlock.
+ * exists), the preload strategy, the seek governor and the playback unlock.
  *
  * Preload strategy — balancing fast start against instant scrubbing:
  * - reduced motion        → no video at all (poster only), done immediately;
@@ -55,14 +85,27 @@ export function useScrollVideo(
 ): ScrollVideoController {
   const readyRef = useRef(false)
   const durationRef = useRef(0)
+  const govRef = useRef<GovernorState>({
+    cost: GOVERNOR.initialCostMs,
+    pendingSince: 0,
+    lastSeekAt: 0,
+    samples: 0,
+    frameHandle: 0,
+  })
 
   useEffect(() => {
-    const video = videoRef.current
+    const video = videoRef.current as FrameCallbackVideo | null
+    const gov = govRef.current
     const abort = new AbortController()
     let objectUrl: string | null = null
     let pollId: number | null = null
     let onProgressEvt: (() => void) | null = null
     let cancelled = false
+
+    gov.cost = GOVERNOR.initialCostMs
+    gov.pendingSince = 0
+    gov.lastSeekAt = 0
+    gov.samples = 0
 
     const finish = (mode: PreloadState['mode'], usedMobileSource: boolean) => {
       if (cancelled) return
@@ -82,15 +125,42 @@ export function useScrollVideo(
     }
     video.addEventListener('loadedmetadata', onMeta)
 
-    // iOS/Safari quirk: one muted play()+pause() on the first touch
-    // makes programmatic seeking reliable.
+    // Fallback completion signal for browsers without frame callbacks (Firefox).
+    const onSeeked = () => settle(gov, performance.now())
+    video.addEventListener('seeked', onSeeked)
+
+    // Every engine seeks more reliably after the element has been played once;
+    // iOS additionally refuses programmatic seeks until a gesture-driven play.
+    let unlocked = false
     const unlock = () => {
+      if (unlocked) return
+      unlocked = true
       video
         .play()
         .then(() => video.pause())
         .catch(() => {})
     }
+    window.addEventListener('pointerdown', unlock, { once: true, passive: true })
     window.addEventListener('touchstart', unlock, { once: true, passive: true })
+    window.addEventListener('keydown', unlock, { once: true })
+
+    if (import.meta.env.DEV) {
+      ;(window as unknown as { __xpGovernor?: unknown }).__xpGovernor = {
+        stats: () => ({
+          seekCostMs: Math.round(gov.cost * 100) / 100,
+          seeks: gov.samples,
+          intervalMs: Math.round(
+            clamp(
+              gov.cost * GOVERNOR.headroom,
+              GOVERNOR.minIntervalMs,
+              GOVERNOR.maxIntervalMs,
+            ),
+          ),
+          frameCallback: typeof video.requestVideoFrameCallback === 'function',
+          fastSeek: typeof video.fastSeek === 'function',
+        }),
+      }
+    }
 
     const startProgressive = (source: ProbeResult) => {
       video.preload = 'auto'
@@ -197,9 +267,18 @@ export function useScrollVideo(
       readyRef.current = false
       durationRef.current = 0
       if (pollId !== null) clearInterval(pollId)
+      if (gov.frameHandle && video.cancelVideoFrameCallback) {
+        video.cancelVideoFrameCallback(gov.frameHandle)
+        gov.frameHandle = 0
+      }
       if (onProgressEvt) video.removeEventListener('progress', onProgressEvt)
       video.removeEventListener('loadedmetadata', onMeta)
+      video.removeEventListener('seeked', onSeeked)
+      window.removeEventListener('pointerdown', unlock)
       window.removeEventListener('touchstart', unlock)
+      window.removeEventListener('keydown', unlock)
+      if (import.meta.env.DEV)
+        delete (window as unknown as { __xpGovernor?: unknown }).__xpGovernor
       video.removeAttribute('src')
       video.load()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
@@ -210,21 +289,61 @@ export function useScrollVideo(
     () => ({
       isReady: () => readyRef.current,
       update(progress: number) {
-        const video = videoRef.current
+        const video = videoRef.current as FrameCallbackVideo | null
         if (!video || !readyRef.current) return
         const duration = durationRef.current
         if (!duration) return
-        // A seek is still in flight — queuing another makes decoders stutter.
+        // Nothing is composited while hidden — seeking would only burn decode.
+        if (document.hidden) return
+
+        const gov = govRef.current
+        const now = performance.now()
+
+        if (gov.pendingSince !== 0) {
+          // A seek is still in flight; stacking another makes decoders thrash.
+          if (now - gov.pendingSince < GOVERNOR.watchdogMs) return
+          // Its completion signal never arrived (some engines drop it under
+          // rapid seeking) — charge the full wait and reopen the gate.
+          gov.cost = GOVERNOR.watchdogMs
+          gov.pendingSince = 0
+        }
         if (video.seeking) return
+
+        // Issue seeks no faster than this browser has proven it can retire them.
+        const interval = clamp(
+          gov.cost * GOVERNOR.headroom,
+          GOVERNOR.minIntervalMs,
+          GOVERNOR.maxIntervalMs,
+        )
+        if (now - gov.lastSeekAt < interval) return
+
         const max = Math.max(duration - EXPERIENCE.videoEndEpsilon, 0)
-        const target = Math.min(Math.max(progress, 0), 1) * max
-        if (Math.abs(target - video.currentTime) < EXPERIENCE.minTimeDelta)
-          return
-        const fastSeek = (
-          video as HTMLVideoElement & { fastSeek?: (time: number) => void }
-        ).fastSeek
+        const target = clamp(progress, 0, 1) * max
+        // On a slow engine, only movement worth its seek cost is worth seeking.
+        const minDelta = Math.max(
+          GOVERNOR.minTimeDelta,
+          gov.cost * GOVERNOR.costToTimeDelta,
+        )
+        if (Math.abs(target - video.currentTime) < minDelta) return
+
+        gov.pendingSince = now
+        gov.lastSeekAt = now
+
+        // Prefer the frame-presentation callback: it measures until pixels
+        // actually change, which is what the viewer perceives as the seek.
+        if (
+          typeof video.requestVideoFrameCallback === 'function' &&
+          typeof video.cancelVideoFrameCallback === 'function'
+        ) {
+          if (gov.frameHandle) video.cancelVideoFrameCallback(gov.frameHandle)
+          gov.frameHandle = video.requestVideoFrameCallback((presentedAt) => {
+            gov.frameHandle = 0
+            settle(gov, presentedAt)
+          })
+        }
+
         // With an all-intra encode, fastSeek is frame-accurate and cheaper (Safari).
-        if (typeof fastSeek === 'function') fastSeek.call(video, target)
+        if (typeof video.fastSeek === 'function') video.fastSeek(target)
         else video.currentTime = target
       },
     }),

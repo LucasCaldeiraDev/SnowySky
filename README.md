@@ -15,6 +15,7 @@ npm install
 npm run dev        # http://localhost:4180
 npm run build      # typecheck + build de produção
 node scripts/test-experience.mjs   # smoke-test Playwright (usa Chrome/Edge do sistema)
+node scripts/governor-probe.mjs    # mede o seek governor (--cpu 6 emula device lento)
 ```
 
 ## Estrutura
@@ -38,6 +39,6 @@ public/assets/          ← vídeo + poster (PLACEHOLDERS — ver PLACEHOLDERS.m
 
 ## Pendências conhecidas
 
-- E-mail do CTA `START A PROJECT` é placeholder (`src/data/scenes.ts` → `FINAL_CTA.primaryHref`).
-- Vídeo mobile 9:16 dedicado: decisão adiada — desktop 16:9 com `object-fit: cover` em avaliação.
+- Vídeo mobile 9:16 dedicado: desnecessário por ora — crop 16:9 validado, a casa
+  permanece composta no final em 390px.
 - SEG 3 (extensão da aproximação) permanece opcional, não gerado.

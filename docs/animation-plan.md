@@ -29,7 +29,30 @@ desktop / 520vh mobile / 420vh reduced-motion — valores em `scenes.ts`).
   - fallback de segurança: começa após 12s se houver dados reproduzíveis.
 - Encode **all-intra (GOP 1)** — cada frame é keyframe; sem isso o scrub "pula"
   (e, no modo progressivo, seeks fora do buffer resolvem rápido via range requests).
-- Unlock de seek no iOS: `play().then(pause())` no primeiro touch.
+- Unlock de playback no primeiro gesto (pointerdown/touchstart/keydown):
+  todo engine busca melhor após um `play()`; no iOS é obrigatório.
+
+### Seek governor (fecha o gap entre navegadores)
+
+Cada engine cobra um preço diferente por um `currentTime`. Em vez de fixar uma
+taxa, o governador (`GOVERNOR` em `scenes.ts`) **mede** e se adapta:
+
+- sinal de conclusão: `requestVideoFrameCallback` quando existe (Chrome/Safari
+  — mede até o pixel mudar), com o evento `seeked` como fallback (Firefox);
+- média móvel do custo real → intervalo mínimo entre seeks
+  (`custo × 1,15`, limitado a 16–260ms): navegador rápido scruba a cada frame,
+  navegador lento recebe menos seeks e maiores em vez de uma fila que trava o decoder;
+- limiar de movimento também escala com o custo (seek caro exige delta maior);
+- watchdog de 900ms: se o sinal de conclusão nunca chega, o portão reabre;
+- `fastSeek` no Safari, `currentTime` nos demais; pausa total com aba oculta.
+
+Medido com `node scripts/governor-probe.mjs [--cpu N]`:
+
+| Cenário | Custo do seek | Intervalo | Seeks no sweep |
+| ------- | ------------- | --------- | -------------- |
+| Chrome normal | 1,12 ms | 16 ms (piso) | 262 |
+| CPU 6× lenta | 3,60 ms | 16 ms (piso) | 228 |
+| CPU 20× lenta | 16,13 ms | **19 ms (back-off)** | 92 |
 - Sem arquivo de vídeo → modo procedural (gradiente pan) com badge de placeholder.
 
 ## Timing das cenas
