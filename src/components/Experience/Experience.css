@@ -1,0 +1,162 @@
+.xp-track {
+  position: relative;
+  height: 650vh; /* precise value is set from scenes.ts */
+}
+
+.xp-anchor-end {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+
+.xp-stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow: clip;
+  background: var(--bg) url('/assets/poster.jpg') center / cover no-repeat;
+}
+
+/* ------------------------------------------------------------------ video */
+
+.xp-video-shell {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-video);
+  opacity: 0;
+  visibility: hidden; /* intro fades it in */
+}
+
+.xp-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.xp--novideo .xp-video-shell,
+.xp--reduced .xp-video-shell {
+  display: none;
+}
+
+/* -------------------------------------------------- procedural fallback */
+
+.xp-fallback {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  display: none;
+}
+
+.xp--novideo .xp-fallback {
+  display: block;
+}
+
+.xp--novideo .xp-stage {
+  background-image: none;
+}
+
+.xp-fallback-inner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 300%;
+  will-change: transform;
+  background: linear-gradient(
+    180deg,
+    #86aecf 0%,
+    #bfd3e2 14%,
+    #e9edf0 26%,
+    #d9e0e4 38%,
+    #93a8ae 55%,
+    #5e7a6e 70%,
+    #27403c 85%,
+    #16262b 100%
+  );
+}
+
+/* --------------------------------------------------------------- overlays */
+
+.xp-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(8, 12, 17, 0.34) 0%,
+      rgba(8, 12, 17, 0) 20%,
+      rgba(8, 12, 17, 0) 78%,
+      rgba(8, 12, 17, 0.42) 100%
+    ),
+    radial-gradient(
+      130% 95% at 50% 42%,
+      rgba(8, 12, 17, 0) 58%,
+      rgba(8, 12, 17, 0.3) 100%
+    );
+}
+
+.xp-grain {
+  position: absolute;
+  inset: -60px;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+  animation: grain-shift 1.2s steps(5) infinite;
+}
+
+@media (prefers-reduced-motion: reduce), (max-width: 768px) {
+  .xp-grain {
+    animation: none;
+  }
+}
+
+@keyframes grain-shift {
+  0% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-16px, 9px);
+  }
+  40% {
+    transform: translate(11px, -13px);
+  }
+  60% {
+    transform: translate(-9px, -7px);
+  }
+  80% {
+    transform: translate(13px, 11px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+.xp-dim {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: var(--bg-deep);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ badge */
+
+.xp-badge {
+  position: absolute;
+  left: clamp(20px, 3vw, 44px);
+  top: clamp(70px, 10vh, 110px);
+  z-index: var(--z-chrome);
+  font-size: 0.56rem;
+  letter-spacing: 0.28em;
+  padding: 0.9em 1.4em;
+  border: 1px dashed rgba(244, 241, 234, 0.35);
+  color: var(--ink-dim);
+  background: rgba(11, 15, 20, 0.35);
+  pointer-events: none;
+}

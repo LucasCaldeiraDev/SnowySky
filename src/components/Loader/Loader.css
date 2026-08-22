@@ -1,0 +1,52 @@
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-loader);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.loader-mark {
+  width: 26px;
+  height: 26px;
+  color: var(--ink-dim);
+  margin-bottom: 2rem;
+}
+
+.loader-title {
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: clamp(1.9rem, 4.2vw, 3.1rem);
+  line-height: 1;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em; /* optically recenter tracked caps */
+}
+
+.loader-sub {
+  margin-top: 1.1rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.46em;
+  text-indent: 0.46em;
+  color: var(--ink-faint);
+}
+
+.loader-line {
+  display: block;
+  width: min(240px, 46vw);
+  height: 1px;
+  margin-top: 2.6rem;
+  background: rgba(244, 241, 234, 0.14);
+  overflow: hidden;
+}
+
+.loader-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: left center;
+}

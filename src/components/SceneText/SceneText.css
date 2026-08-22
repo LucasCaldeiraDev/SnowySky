@@ -1,0 +1,208 @@
+.scene {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 6vw;
+  visibility: hidden; /* the scroll updater reveals scenes in-band */
+  pointer-events: none;
+}
+
+.scene [data-line] {
+  opacity: 0;
+}
+
+.scene--hero {
+  visibility: visible; /* intro-managed */
+}
+
+.line {
+  display: block;
+}
+
+.line > span {
+  display: block;
+  will-change: transform;
+}
+
+/* masked line reveals for the large typography */
+.hero-title .line,
+.statement .line {
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ hero */
+
+.hero-title {
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: clamp(3.2rem, 10.5vw, 10.6rem);
+  line-height: 1.02;
+  letter-spacing: 0.06em;
+  text-indent: 0.06em;
+  color: var(--ink);
+}
+
+.hero-sub {
+  margin-top: clamp(1.4rem, 2.6vh, 2.4rem);
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 300;
+  font-size: clamp(1.05rem, 1.6vw, 1.4rem);
+  letter-spacing: 0.03em;
+  color: var(--ink-dim);
+}
+
+.hero-hint {
+  position: absolute;
+  bottom: 8.5vh;
+  left: 0;
+  right: 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  color: var(--ink-faint);
+}
+
+.hero-hint-line {
+  display: block;
+  width: 1px;
+  height: 34px;
+  margin: 15px auto 0;
+  background: linear-gradient(180deg, var(--ink-dim), transparent);
+  animation: hint-drop 2.4s ease-in-out infinite;
+}
+
+@keyframes hint-drop {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(9px);
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-hint-line {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------ statements */
+
+.statement {
+  font-family: var(--serif);
+  font-weight: 300;
+  color: var(--ink);
+  letter-spacing: 0.1em;
+  text-indent: 0.1em;
+  line-height: 1.16;
+  font-size: clamp(2.1rem, 5.6vw, 5.4rem);
+}
+
+.scene--statement-xl .statement {
+  font-size: clamp(2.5rem, 7vw, 6.9rem);
+  letter-spacing: 0.12em;
+  text-indent: 0.12em;
+  line-height: 1.12;
+}
+
+.scene--reveal .statement {
+  font-size: clamp(2.3rem, 6.2vw, 6.2rem);
+  letter-spacing: 0.11em;
+  text-indent: 0.11em;
+}
+
+/* ------------------------------------------------- scene 04 marker (alt) */
+
+.scene--marker {
+  justify-content: flex-start;
+  padding-top: 22vh;
+}
+
+.marker-rule {
+  width: 1px;
+  height: 44px;
+  background: linear-gradient(180deg, transparent, var(--ink-dim));
+}
+
+.marker-value {
+  margin-top: 18px;
+  font-size: 0.72rem;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------- scene 05 meta */
+
+.meta-label {
+  font-size: 0.66rem;
+  letter-spacing: 0.44em;
+  text-indent: 0.44em;
+  color: var(--ink-dim);
+}
+
+.meta-rule {
+  margin: 24px 0;
+}
+
+.meta-rule > span {
+  display: block;
+  width: clamp(90px, 12vw, 150px);
+  height: 1px;
+  background: var(--hairline);
+}
+
+.meta-index {
+  font-size: 0.62rem;
+  letter-spacing: 0.44em;
+  text-indent: 0.44em;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- mobile */
+
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: clamp(3rem, 13.5vw, 4.6rem);
+    letter-spacing: 0.035em;
+    text-indent: 0.035em;
+  }
+
+  .statement,
+  .scene--statement-xl .statement,
+  .scene--reveal .statement {
+    letter-spacing: 0.07em;
+    text-indent: 0.07em;
+  }
+
+  .statement {
+    font-size: clamp(1.8rem, 8vw, 2.6rem);
+  }
+
+  .scene--statement-xl .statement {
+    font-size: clamp(2rem, 9.5vw, 3rem);
+  }
+
+  .scene--reveal .statement {
+    font-size: clamp(1.9rem, 8.8vw, 2.8rem);
+  }
+
+  .scene--marker {
+    padding-top: 18vh;
+  }
+
+  .hero-hint {
+    bottom: 10vh;
+  }
+}

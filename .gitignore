@@ -1,0 +1,18 @@
+# deps / build
+node_modules
+dist
+*.local
+
+# editor / os
+.DS_Store
+Thumbs.db
+
+# logs
+npm-debug.log*
+
+# test artifacts
+scripts/shots/
+
+# 4K masters (heavy — kept local only; see docs/asset-manifest.md)
+masters/*
+!masters/README.md

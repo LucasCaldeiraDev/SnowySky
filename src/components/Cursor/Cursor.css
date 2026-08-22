@@ -1,0 +1,58 @@
+html.has-cursor,
+html.has-cursor a,
+html.has-cursor button {
+  cursor: none;
+}
+
+.cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-cursor);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  mix-blend-mode: difference;
+}
+
+.cursor-dot,
+.cursor-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
+.cursor-dot i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%);
+  transition: transform 0.3s ease;
+}
+
+.cursor-ring i {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  transform: translate(-50%, -50%) scale(1);
+  transition:
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.4s ease;
+}
+
+.cursor.is-hover .cursor-ring i {
+  transform: translate(-50%, -50%) scale(1.55);
+  border-color: rgba(255, 255, 255, 0.9);
+}
+
+.cursor.is-hover .cursor-dot i {
+  transform: translate(-50%, -50%) scale(0.45);
+}
+
+.cursor.is-down .cursor-ring i {
+  transform: translate(-50%, -50%) scale(0.82);
+}

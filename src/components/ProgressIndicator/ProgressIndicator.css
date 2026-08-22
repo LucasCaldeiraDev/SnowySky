@@ -1,0 +1,46 @@
+.progress {
+  position: absolute;
+  right: clamp(20px, 3vw, 44px);
+  bottom: max(clamp(18px, 3.2vh, 30px), env(safe-area-inset-bottom, 0px) + 12px);
+  z-index: var(--z-chrome);
+  mix-blend-mode: difference;
+  opacity: 0; /* intro fades it in */
+  pointer-events: none;
+}
+
+.progress-track {
+  display: block;
+  width: clamp(110px, 12vw, 170px);
+  height: 1px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.progress-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.progress-alt {
+  position: absolute;
+  left: clamp(20px, 3vw, 44px);
+  bottom: max(clamp(16px, 3.2vh, 28px), env(safe-area-inset-bottom, 0px) + 10px);
+  z-index: var(--z-chrome);
+  display: none;
+  font-size: 0.56rem;
+  letter-spacing: 0.32em;
+  color: rgba(255, 255, 255, 0.85);
+  font-variant-numeric: tabular-nums;
+  mix-blend-mode: difference;
+  opacity: 0; /* intro fades it in */
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .progress-alt {
+    display: block;
+  }
+}
