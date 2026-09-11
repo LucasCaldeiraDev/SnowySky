@@ -150,16 +150,44 @@ export const EXPERIENCE = {
 }
 
 /**
- * Seek governor — closes the cross-browser gap.
+ * Two governors keep the scroll↔video mapping error- and gap-free, each
+ * bounding a different side of the pipe:
  *
- * Browsers disagree wildly about what a `currentTime` seek costs: Chrome and
- * Safari land one on an all-intra file in a few milliseconds, Firefox can take
- * tens of milliseconds and quietly queues the overflow until the decoder
- * stutters. Rather than guessing a fixed rate, the governor measures how long
- * this browser actually takes to present a seeked frame and issues seeks only
- * as fast as it can retire them.
+ *   raw scroll  --[SCROLL_GOVERNOR: max]-->  target  --[lerp]-->  smooth  --[SEEK_GOVERNOR: min]-->  video.currentTime
+ *
+ * - SCROLL_GOVERNOR caps how fast the *input* is allowed to move things —
+ *   however hard the user flings, drags the scrollbar, or hits End, the
+ *   video can't be asked to skip ahead by more than a bounded amount per
+ *   frame. Without this, an instant scroll jump reads as a jump-cut.
+ * - SEEK_GOVERNOR caps how fast the *output* can retire seeks — it measures
+ *   what this browser actually costs per seek and never issues them faster
+ *   than that, and never bothers seeking for movement too small to see.
+ *
+ * Together: no seek request ever asks for more than the browser can (or the
+ * eye should) perceive as continuous motion — no errors, no visible gaps.
  */
-export const GOVERNOR = {
+export const SCROLL_GOVERNOR = {
+  /**
+   * Hard speed cap on the user-input side: however fast the user scrolls,
+   * the tracked progress can't be perceived to play the video faster than
+   * this multiple of its own duration. E.g. 30 means a 30s video can never
+   * be swept end-to-end in under ~1s, no matter how violent the scroll
+   * input — a bounded fast-forward instead of a jump-cut.
+   */
+  maxPlaybackMultiple: 30,
+  /**
+   * Defensive ceiling on the per-frame delta time used for the speed clamp
+   * above. GSAP's own ticker lag-smoothing already collapses the pathological
+   * case (a tab returning from background) to ~33ms before this code ever
+   * sees it, so this only needs to cover routine multi-frame hitches (a GC
+   * pause, a slow paint) — kept tight so the worst-case single-tick jump
+   * (`maxPlaybackMultiple × this`, duration-independent) stays well under
+   * what reads as a skip: 30 × 48ms = 1.44s, not 30 × 100ms = 3s.
+   */
+  maxFrameDeltaMs: 48,
+}
+
+export const SEEK_GOVERNOR = {
   /** Assumed seek cost before the first measurement lands (ms). */
   initialCostMs: 24,
   /** Weight of each new latency sample in the moving average. */
@@ -171,7 +199,7 @@ export const GOVERNOR = {
   headroom: 1.15,
   /** A seek still pending after this is assumed lost (ms). */
   watchdogMs: 900,
-  /** Never seek for movement smaller than this (s). */
+  /** Never seek for movement smaller than this (s) — the governor's "min". */
   minTimeDelta: 1 / 60,
   /** Expensive seeks demand a coarser threshold: seconds gained per ms of cost. */
   costToTimeDelta: 1 / 900,

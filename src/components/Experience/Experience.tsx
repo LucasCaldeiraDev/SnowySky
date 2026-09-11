@@ -8,6 +8,7 @@ import {
   ASSETS,
   EXPERIENCE,
   SCENES,
+  SCROLL_GOVERNOR,
 } from '../../data/scenes'
 import type { SceneDef } from '../../data/scenes'
 import type { LoaderBus, PreloadMode, PreloadState } from '../../lib/loaderBus'
@@ -90,6 +91,8 @@ export function Experience({ reduced, bus }: Props) {
 
     const state = {
       raw: 0,
+      /** Velocity-clamped chase target — see SCROLL_GOVERNOR below. */
+      target: 0,
       smooth: 0,
       altShown: -1,
       bucket: -1,
@@ -101,6 +104,25 @@ export function Experience({ reduced, bus }: Props) {
     let tick: ((time: number, deltaMS: number) => void) | null = null
     let unsubIntro: (() => void) | null = null
     let disposed = false
+
+    // DEV-only ground-truth probe for the scroll governor's per-tick clamp —
+    // measured from inside the real tick, immune to an external polling
+    // loop's own scheduling jitter (which a black-box video.currentTime
+    // sampler can't tell apart from a genuine oversized step).
+    const scrollGovProbe = import.meta.env.DEV
+      ? { maxStepSeen: 0, ticks: 0 }
+      : null
+    if (scrollGovProbe) {
+      ;(
+        window as unknown as { __xpScrollGovernor?: unknown }
+      ).__xpScrollGovernor = {
+        stats: () => ({ ...scrollGovProbe }),
+        reset: () => {
+          scrollGovProbe.maxStepSeen = 0
+          scrollGovProbe.ticks = 0
+        },
+      }
+    }
 
     const ctx = gsap.context(() => {
       const q = (sel: string) => root.querySelector<HTMLElement>(sel)
@@ -287,12 +309,34 @@ export function Experience({ reduced, bus }: Props) {
       })
 
       tick = (_time, deltaMS) => {
+        // Scroll governor: however hard the user flings, drags the
+        // scrollbar, or hits End, `target` can only chase `raw` at a bounded
+        // speed — a fast, continuous catch-up instead of a jump-cut. Below
+        // that speed (normal scrolling, the vast majority of the time) this
+        // is a no-op and target tracks raw exactly, one-to-one.
+        const duration = video.getDuration()
+        const maxProgressPerSecond = duration
+          ? SCROLL_GOVERNOR.maxPlaybackMultiple / duration
+          : Infinity
+        const dt = Math.min(deltaMS, SCROLL_GOVERNOR.maxFrameDeltaMs) / 1000
+        const maxStep = maxProgressPerSecond * dt
+        const rawDelta = state.raw - state.target
+        const appliedStep =
+          rawDelta < -maxStep ? -maxStep : rawDelta > maxStep ? maxStep : rawDelta
+        state.target += appliedStep
+        if (scrollGovProbe) {
+          scrollGovProbe.ticks++
+          const stepSec = Math.abs(appliedStep) * duration
+          if (stepSec > scrollGovProbe.maxStepSeen)
+            scrollGovProbe.maxStepSeen = stepSec
+        }
+
         const k = reduced
           ? 1
           : 1 - Math.exp((-deltaMS / 1000) * EXPERIENCE.smoothing)
-        state.smooth += (state.raw - state.smooth) * k
-        if (Math.abs(state.raw - state.smooth) < 0.0004)
-          state.smooth = state.raw
+        state.smooth += (state.target - state.smooth) * k
+        if (Math.abs(state.target - state.smooth) < 0.0004)
+          state.smooth = state.target
         const p = state.smooth
 
         video.update(p)
@@ -380,6 +424,9 @@ export function Experience({ reduced, bus }: Props) {
       if (unsubIntro) unsubIntro()
       ScrollTrigger.removeEventListener('refreshInit', readEnv)
       document.documentElement.classList.remove('is-locked')
+      if (scrollGovProbe)
+        delete (window as unknown as { __xpScrollGovernor?: unknown })
+          .__xpScrollGovernor
       ctx.revert()
     }
   }, [reduced, video, bus])

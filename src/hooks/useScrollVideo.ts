@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { RefObject } from 'react'
-import { ASSETS, EXPERIENCE, GOVERNOR, LOADER } from '../data/scenes'
+import { ASSETS, EXPERIENCE, SEEK_GOVERNOR, LOADER } from '../data/scenes'
 import type { LoaderBus, PreloadState } from '../lib/loaderBus'
 
 export interface ScrollVideoController {
   /** True once the video can be scrubbed. */
   isReady(): boolean
+  /** Video duration in seconds, or 0 before it's known (e.g. reduced motion). */
+  getDuration(): number
   /** Feed the smoothed experience progress (0–1), once per frame. */
   update(progress: number): void
 }
@@ -35,7 +37,7 @@ const clamp = (v: number, lo: number, hi: number) =>
 function settle(gov: GovernorState, at: number) {
   if (gov.pendingSince === 0) return
   const latency = at - gov.pendingSince
-  gov.cost += (latency - gov.cost) * GOVERNOR.sample
+  gov.cost += (latency - gov.cost) * SEEK_GOVERNOR.sample
   gov.pendingSince = 0
   gov.samples += 1
 }
@@ -86,7 +88,7 @@ export function useScrollVideo(
   const readyRef = useRef(false)
   const durationRef = useRef(0)
   const govRef = useRef<GovernorState>({
-    cost: GOVERNOR.initialCostMs,
+    cost: SEEK_GOVERNOR.initialCostMs,
     pendingSince: 0,
     lastSeekAt: 0,
     samples: 0,
@@ -102,7 +104,7 @@ export function useScrollVideo(
     let onProgressEvt: (() => void) | null = null
     let cancelled = false
 
-    gov.cost = GOVERNOR.initialCostMs
+    gov.cost = SEEK_GOVERNOR.initialCostMs
     gov.pendingSince = 0
     gov.lastSeekAt = 0
     gov.samples = 0
@@ -131,18 +133,45 @@ export function useScrollVideo(
 
     // Every engine seeks more reliably after the element has been played once;
     // iOS additionally refuses programmatic seeks until a gesture-driven play.
-    let unlocked = false
-    const unlock = () => {
-      if (unlocked) return
-      unlocked = true
+    // The unlock needs BOTH a user gesture and playable data, and on mobile
+    // networks the first touch often lands before the video has either —
+    // play() then rejects and, if that attempt were the only one, the video
+    // would stay frozen for the rest of the session. So this keeps retrying
+    // on every later gesture and every readiness event until one succeeds.
+    let gestureSeen = false
+    let videoUnlocked = false
+    // Arrow functions (not hoisted `function` declarations) so TS keeps the
+    // `video is non-null` narrowing from the guard clause above inside them.
+    const attemptUnlock = () => {
+      if (videoUnlocked || !gestureSeen || video.readyState < 2) return
       video
         .play()
-        .then(() => video.pause())
-        .catch(() => {})
+        .then(() => {
+          videoUnlocked = true
+          video.pause()
+          removeUnlockListeners()
+        })
+        .catch(() => {
+          // Not ready yet (e.g. mid-seek) — the next gesture or readiness
+          // event retries; listeners stay attached until a play() resolves.
+        })
     }
-    window.addEventListener('pointerdown', unlock, { once: true, passive: true })
-    window.addEventListener('touchstart', unlock, { once: true, passive: true })
-    window.addEventListener('keydown', unlock, { once: true })
+    const onGesture = () => {
+      gestureSeen = true
+      attemptUnlock()
+    }
+    const removeUnlockListeners = () => {
+      window.removeEventListener('pointerdown', onGesture)
+      window.removeEventListener('touchstart', onGesture)
+      window.removeEventListener('keydown', onGesture)
+      video.removeEventListener('canplay', attemptUnlock)
+      video.removeEventListener('loadeddata', attemptUnlock)
+    }
+    window.addEventListener('pointerdown', onGesture, { passive: true })
+    window.addEventListener('touchstart', onGesture, { passive: true })
+    window.addEventListener('keydown', onGesture)
+    video.addEventListener('canplay', attemptUnlock)
+    video.addEventListener('loadeddata', attemptUnlock)
 
     if (import.meta.env.DEV) {
       ;(window as unknown as { __xpGovernor?: unknown }).__xpGovernor = {
@@ -151,13 +180,16 @@ export function useScrollVideo(
           seeks: gov.samples,
           intervalMs: Math.round(
             clamp(
-              gov.cost * GOVERNOR.headroom,
-              GOVERNOR.minIntervalMs,
-              GOVERNOR.maxIntervalMs,
+              gov.cost * SEEK_GOVERNOR.headroom,
+              SEEK_GOVERNOR.minIntervalMs,
+              SEEK_GOVERNOR.maxIntervalMs,
             ),
           ),
           frameCallback: typeof video.requestVideoFrameCallback === 'function',
           fastSeek: typeof video.fastSeek === 'function',
+          unlocked: videoUnlocked,
+          gestureSeen,
+          readyState: video.readyState,
         }),
       }
     }
@@ -274,9 +306,7 @@ export function useScrollVideo(
       if (onProgressEvt) video.removeEventListener('progress', onProgressEvt)
       video.removeEventListener('loadedmetadata', onMeta)
       video.removeEventListener('seeked', onSeeked)
-      window.removeEventListener('pointerdown', unlock)
-      window.removeEventListener('touchstart', unlock)
-      window.removeEventListener('keydown', unlock)
+      removeUnlockListeners()
       if (import.meta.env.DEV)
         delete (window as unknown as { __xpGovernor?: unknown }).__xpGovernor
       video.removeAttribute('src')
@@ -288,6 +318,7 @@ export function useScrollVideo(
   return useMemo<ScrollVideoController>(
     () => ({
       isReady: () => readyRef.current,
+      getDuration: () => durationRef.current,
       update(progress: number) {
         const video = videoRef.current as FrameCallbackVideo | null
         if (!video || !readyRef.current) return
@@ -301,19 +332,19 @@ export function useScrollVideo(
 
         if (gov.pendingSince !== 0) {
           // A seek is still in flight; stacking another makes decoders thrash.
-          if (now - gov.pendingSince < GOVERNOR.watchdogMs) return
+          if (now - gov.pendingSince < SEEK_GOVERNOR.watchdogMs) return
           // Its completion signal never arrived (some engines drop it under
           // rapid seeking) — charge the full wait and reopen the gate.
-          gov.cost = GOVERNOR.watchdogMs
+          gov.cost = SEEK_GOVERNOR.watchdogMs
           gov.pendingSince = 0
         }
         if (video.seeking) return
 
         // Issue seeks no faster than this browser has proven it can retire them.
         const interval = clamp(
-          gov.cost * GOVERNOR.headroom,
-          GOVERNOR.minIntervalMs,
-          GOVERNOR.maxIntervalMs,
+          gov.cost * SEEK_GOVERNOR.headroom,
+          SEEK_GOVERNOR.minIntervalMs,
+          SEEK_GOVERNOR.maxIntervalMs,
         )
         if (now - gov.lastSeekAt < interval) return
 
@@ -321,8 +352,8 @@ export function useScrollVideo(
         const target = clamp(progress, 0, 1) * max
         // On a slow engine, only movement worth its seek cost is worth seeking.
         const minDelta = Math.max(
-          GOVERNOR.minTimeDelta,
-          gov.cost * GOVERNOR.costToTimeDelta,
+          SEEK_GOVERNOR.minTimeDelta,
+          gov.cost * SEEK_GOVERNOR.costToTimeDelta,
         )
         if (Math.abs(target - video.currentTime) < minDelta) return
 

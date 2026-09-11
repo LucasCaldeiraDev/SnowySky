@@ -14,9 +14,14 @@ React 19 · TypeScript · Vite 7 · GSAP 3 (ScrollTrigger + ScrollToPlugin) · C
 npm install
 npm run dev        # http://localhost:4180
 npm run build      # typecheck + build de produção
-node scripts/test-experience.mjs   # smoke-test Playwright (usa Chrome/Edge do sistema)
-node scripts/governor-probe.mjs    # mede o seek governor (--cpu 6 emula device lento)
+node scripts/test-experience.mjs      # smoke-test Playwright (usa Chrome/Edge do sistema)
+node scripts/governor-probe.mjs       # mede o seek governor (--cpu 6 emula device lento)
+node scripts/mobile-webkit-probe.mjs  # regressão mobile em WebKit real (motor do Safari/iOS)
+node scripts/scroll-governor-probe.mjs  # prova o teto de velocidade do scroll (fling/End/Home)
 ```
+
+> `mobile-webkit-probe.mjs` precisa do WebKit do Playwright instalado uma vez:
+> `npx playwright install webkit`.
 
 ## Estrutura
 
@@ -41,4 +46,5 @@ public/assets/          ← vídeo + poster (PLACEHOLDERS — ver PLACEHOLDERS.m
 
 - Vídeo mobile 9:16 dedicado: desnecessário por ora — crop 16:9 validado, a casa
   permanece composta no final em 390px.
+- Deploy não configurado.
 - SEG 3 (extensão da aproximação) permanece opcional, não gerado.

@@ -15,9 +15,11 @@ export default function App() {
 
   useEffect(() => {
     // The narrative only makes sense from the top.
+    // (`is-locked` itself is set statically on <html> in index.html, not
+    // here — a post-mount effect would leave a race window, right at first
+    // paint, where touch scroll could bounce before React ever runs.)
     history.scrollRestoration = 'manual'
     window.scrollTo(0, 0)
-    document.documentElement.classList.add('is-locked')
   }, [])
 
   const handleGone = useCallback(() => setLoaderGone(true), [])

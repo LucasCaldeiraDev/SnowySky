@@ -52,6 +52,19 @@ html.is-locked body {
   overflow: hidden;
 }
 
+/*
+ * iOS Safari ignores `overflow: hidden` for touch/rubber-band scrolling, so
+ * during the loader + intro (page is always at scrollY 0 at this point) the
+ * body is additionally pinned with `position: fixed` — the standard WebKit
+ * scroll-lock workaround. Sticky descendants are unaffected since the page
+ * isn't scrolled yet either way.
+ */
+html.is-locked body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
+
 img,
 video {
   display: block;
